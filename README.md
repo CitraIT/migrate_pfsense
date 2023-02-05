@@ -35,6 +35,7 @@ At the time, it's possible to migrate without problems:
 - DHCPD static leases
 - Certificate Authorities and Certificates
 - Static Routes
+- Backend Authentication Servers (LDAP)
 
 What's not possible to migrate yet:  
 - Outbound NAT
