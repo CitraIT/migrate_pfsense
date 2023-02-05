@@ -1,7 +1,7 @@
-# migrate_pfsense
-Project to Quick Migrate From pfSense firewall to OPNSense With Easy
+# Migrate pfSense to OPNSense Script
+Script to Quickly Migrate From pfSense firewall to OPNSense With Easy
 
-## usage
+## Usage
 
 1- Install python3.  
 2- Install dependencies.  
@@ -23,3 +23,27 @@ firewall_passwd = 'password'
 python migrate_pfsense.py
 ```  
 7- That's it! Hope it will help you.
+
+
+## Limitations  
+At the time, it's possible to migrate without problems:  
+- Aliases
+- Firewall Rules (both interface and floating rules)
+- NAT rules (port forwarding)
+- OpenVPN servers
+- DHCPD interface config
+- DHCPD static leases
+- Certificate Authorities and Certificates
+- Static Routes
+
+What's not possible to migrate yet:  
+- Outbound NAT
+- 1:1 NAT
+- Certificate Revocation List
+- System Avanced configuration
+- Local users
+- Schedulers
+- Traffic Shaper
+- Captive Portal
+- PPPoE
+- IPSec
