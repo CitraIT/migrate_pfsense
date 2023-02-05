@@ -6,8 +6,8 @@ Script to Quickly Migrate From pfSense firewall to OPNSense With Easy
 1- Install python3.  
 2- Install dependencies.  
 ```
-pip -m install --upgrade pip
-pip install requests
+python -m pip install --upgrade pip
+python -m pip install requests
 ```  
 3- Download this project as .zip or clone it with git clone.  
 4- Download the source pfsense config as a backup (menu diagnostics -> backup & restore), rename the downloaded file to pfsense.xml and put aside (same folder) as migrate_pfsense.py script.  
