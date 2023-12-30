@@ -117,10 +117,10 @@ def migrate_rules(firewall, pfsense_config_path):
 
 
         print(f'\nworking on filter rule: {target_rule["descr"]}')
-        new_rule = {"rule":{"enabled":"1","action":target_rule["type"],"quick":"1","interface":target_rule["interface"],"direction":"in","ipprotocol":target_rule["ipprotocol"],"source_not":"0","destination_not":"0","log":"0","description":target_rule["descr"]}}
+        new_rule = {"rule":{"enabled":"1","action":target_rule["type"],"quick":"1","interface":target_rule["interface"],"direction":"in","ipprotocol":target_rule.get("ipprotocol", "default_value"),"source_not":"0","destination_not":"0","log":"0","description":target_rule["descr"]}}
         
         # fix para regras do pf com ipv4+ipv6 incompatível com opnsense (que é inet ou inet6 mas não inet46)
-        if target_rule["ipprotocol"] == 'inet46':
+        if target_rule.get("ipprotocol", "default_value") == 'inet46':
             print(f'WARN: found firewall rule set as both ipv4+ipv6 thats not compatible with opnsense. the rule will be set only for ipv4! Please, check that!')
             new_rule["rule"]["ipprotocol"] = "inet"
         
@@ -168,8 +168,7 @@ def migrate_rules(firewall, pfsense_config_path):
         if firewall.add_filter_rule(new_rule):
             print(f'[+] rule {new_rule["rule"]["description"]} added with success!')
         else:
-            print(f'[-] error adding rule {new_rule["rule"]["description"]}!')
-            sys.exit(0)
+            print(f'\2 - continuing with next rule')
 
 
             
@@ -259,8 +258,7 @@ def extract_nat_rule_attributes(el_rule):
             rule['destination']['value'] = rule_attr[0].text
             if len(rule_attr) > 1:
                 # port is a range?
-                if '-' in rule_attr[1].text:
-                    #pdb.set_trace()
+                if rule_attr[1].text and '-' in rule_attr[1].text:
                     rule['destination']['dstbeginport'] = rule_attr[1].text.split("-")[0]
                     rule['destination']['dstendport'] = rule_attr[1].text.split("-")[1]
                 else:
@@ -392,10 +390,14 @@ def migrate_certificates(firewall, pfsense_config_path):
     el_cas = root.findall("ca")
     for el_ca in el_cas:
         ca = {}
-        for attr in el_ca:
-            ca[attr.tag] = attr.text
-        
+    for attr in el_ca:
+        ca[attr.tag] = attr.text
+
+    # Check if 'prv' key exists before calling import_ca
+    if 'prv' in ca:
         firewall.import_ca(ca)
+    else:
+        print(f"Skipping CA import due to missing 'prv' key: {ca.get('descr', 'No description')}")
         
     
     # read certificates from pfsense config and import into opnsense
@@ -626,5 +628,4 @@ def migrate_nat(firewall, pfsense_config_path):
         if firewall.add_nat_rule(new_nat_rule):
             print(f'[+] rule {new_nat_rule["descr"]} added with success!')
         else:
-            print(f'[-] error adding rule {new_nat_rule["descr"]}!')
-            sys.exit(0)
+            print(f'\2 - continuing with next rule')
