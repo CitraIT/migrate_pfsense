@@ -343,8 +343,8 @@ class Firewall:
             'act': 'new',
             'descr': ca["descr"],
             'camethod': 'existing',
-            'cert':  b64decode(ca["crt"]).decode().replace("\n","\r\n"),
-            'key': b64decode(ca["prv"]).decode(),
+            'cert': b64decode(ca["crt"]).decode().replace("\\n","\\r\\n"),
+            'key': b64decode(ca.get("prv", "")).decode(),  # Using get with a default value
             'serial': '',
             'caref': ca["refid"],
             'save': 'Save',
@@ -465,10 +465,12 @@ class Firewall:
             r = self.http_session.get(f'{self.baseurl}/system_camanager.php?act=edit&id={ca_id}', verify=False )
             #search for name and id
             ca_name_id_match = re.search('<option value="(?P<refid>\w+)">(?P<caname>[^\s]+)</option>', r.text)
-            print(f'found ca: {ca_name_id_match.group("refid")} : {ca_name_id_match.group("caname")}')
-            # push info into existing ca list
-            existing_ca_info[ca_name_id_match.group("caname")] = ca_name_id_match.group("refid")
-            
+            if ca_name_id_match:
+                print(f'found ca: {ca_name_id_match.group("refid")} : {ca_name_id_match.group("caname")}')
+                # Push info into existing ca list only if a match is found
+                existing_ca_info[ca_name_id_match.group("caname")] = ca_name_id_match.group("refid")
+            else:
+                print("No match found for the CA")
         # get cert name from pfsense config
         target_ca = None
         ca_el = root_config.findall("ca")
@@ -483,13 +485,36 @@ class Firewall:
         if target_ca is None:
             print(f'Error registering crl. could not find CA with refid {crl["caref"]}')
             sys.exit(0)
-            
+    
         target_ca_name = target_ca["descr"]
-        print(f'DEBUG: crl {crl["descr"]} will be registered for ca {target_ca_name} with refid {existing_ca_info[target_ca_name]}')
+        ca_refid = existing_ca_info.get(target_ca_name, "Unknown CA RefID")
+        print(f'DEBUG: crl {crl["descr"]} will be registered for ca {target_ca_name} with refid {ca_refid}')
 
-        # acessing page to register a new crl using ca ref
-        #print(f'acessing page: {self.baseurl}/system_crlmanager.php?act=new&caref={existing_ca_info[target_ca["descr"]]}')
-        r = self.http_session.get(f'{self.baseurl}/system_crlmanager.php?act=new&caref={existing_ca_info[target_ca["descr"]]}', verify=False )
+        data = {
+            self.hidden_name: self.hidden_value,
+            'act': 'new',
+            'descr': crl["descr"],
+            'caref': ca_refid,
+            'crlmethod': 'internal',
+            'crltext':  '',
+            'lifetime': '9999',
+            'save': 'Save'
+        }
+        #headers = r.headers
+        headers = {}
+        headers["X-CSRFToken"] = self.csrf_token
+        headers["referer"] = f'{self.baseurl}/system_crlmanager.php'
+        headers["content-type"] = "application/x-www-form-urlencoded"
+        # Accessing page to register a new CRL using CA ref
+        
+        r = self.http_session.post(f'{self.baseurl}/system_crlmanager.php?act=new&caref={ca_refid}', verify=False, allow_redirects=False, data=data, headers=headers)
+
+
+
+        # Accessing page to register a new CRL using CA ref
+        # Replace direct access with .get method
+        caref = existing_ca_info.get(target_ca_name, "Unknown CA RefID")
+        r = self.http_session.get(f'{self.baseurl}/system_crlmanager.php?act=new&caref={caref}', verify=False )
         
         
         # getting the page token
@@ -509,27 +534,14 @@ class Firewall:
             #print(f'got X-CSRFToken as {match.group("csrftoken")}')
             self.csrf_token = match.group("csrftoken")
         
-        data = {
-            self.hidden_name: self.hidden_value,
-            'act': 'new',
-            'descr': crl["descr"],
-            'caref': existing_ca_info[target_ca_name],
-            'crlmethod': 'internal',
-            'crltext':  '',
-            'lifetime': '9999',
-            'save': 'Save'
-        }
 
         #print(f'DEBUG CRL FORM DATA: {data}')
         
-        #headers = r.headers
-        headers = {}
-        headers["X-CSRFToken"] = self.csrf_token
-        headers["referer"] = f'{self.baseurl}/system_crlmanager.php'
-        headers["content-type"] = "application/x-www-form-urlencoded"
+
         
         # sending form of ca import:
-        r = self.http_session.post(f'{self.baseurl}/system_crlmanager.php?act=new&caref={existing_ca_info[target_ca_name]}', verify=False, allow_redirects=False, data=data, headers=headers)
+        r = self.http_session.post(f'{self.baseurl}/system_crlmanager.php?act=new&caref={ca_refid}', verify=False, allow_redirects=False, data=data, headers=headers)
+
         
         if r.status_code == 302:
             print(f'CRL {crl["descr"]} importado com sucesso!')
@@ -552,8 +564,8 @@ class Firewall:
     #
     #
     def import_openvpn_server(self, openvpn_config):
-        # acessing form of new vpn ( vpn -> openvpn -> servers )
-        r = self.http_session.get(f'{self.baseurl}/vpn_openvpn_server.php?act=new', verify=False )
+        # accessing form of new vpn ( vpn -> openvpn -> servers )
+        r = self.http_session.get(f'{self.baseurl}/vpn_openvpn_server.php?act=new', verify=False)
         
         # getting the page token
         match = re.search('input type="hidden" name="(?P<fieldname>[^"]+)" value="(?P<fieldvalue>[^"]+)', r.text)
@@ -561,7 +573,7 @@ class Firewall:
             print(f'error parsing token on firewall main page')
             sys.exit(0)
         self.hidden_name = match.group("fieldname")
-        self.hidden_value = match.group("fieldvalue")
+        self.hidden_value = match.group("fieldvalue")   
 
         # check x-csrftoken
         match = re.search('setRequestHeader\("X-CSRFToken", "(?P<csrftoken>[^"]+)"', r.text)
@@ -569,7 +581,6 @@ class Firewall:
             print(f'failed to get X-CSRFToken')
             sys.exit(0)
         else:
-            #print(f'got X-CSRFToken as {match.group("csrftoken")}')
             self.csrf_token = match.group("csrftoken")
         
         data = {
@@ -587,6 +598,7 @@ class Firewall:
             'certref': openvpn_config["certref"],
             'crypto': openvpn_config["data_ciphers"].split(",")[0],
             'digest': openvpn_config["digest"],
+            'dns_server1': openvpn_config.get('dns_server1', ''),
             'cert_depth': openvpn_config["cert_depth"],
             'tunnel_network': openvpn_config["tunnel_network"],
             'tunnel_networkv6': '',
@@ -605,45 +617,39 @@ class Firewall:
             'save': 'Save',
             'act': 'new'
         }
-        
-        # fix for data
+        if 'dns_domain' in openvpn_config:
+            data.update({
+                'dns_domain_enable': 'yes',
+                'dns_domain': openvpn_config.get("dns_domain", ""),
+                'dns_server_enable': 'yes',
+                'push_register_dns': 'yes'
+            })
+            for key in ['dns_server1', 'dns_server2', 'dns_server3', 'dns_server4']:
+                if key in openvpn_config:
+                    data[key] = openvpn_config[key]
         if 'authmode' in openvpn_config:
             data['authmode[]'] = openvpn_config["authmode"]
         if not 'UDP' in openvpn_config["protocol"]:
             data["protocol"] = openvpn_config["protocol"]
-        if 'dns_domain' in openvpn_config:
-            data['dns_domain_enable'] = 'yes'
-            data['dns_domain'] = openvpn_config["dns_domain"]
-            data['dns_server_enable'] = 'yes'
-            data['dns_server1'] = openvpn_config["dns_server1"]
-            data['dns_server2'] = openvpn_config["dns_server2"]
-            data['dns_server3'] = openvpn_config["dns_server3"]
-            data['dns_server4'] = openvpn_config["dns_server4"]
-            data['push_register_dns'] = 'yes'
         if openvpn_config["username_as_common_name"] == 'enabled':
-            data['cso_login_matching'] = 'yes'
+            data['cso_login_matching'] = 'yes'  
 
-        #print(f'DEBUG VPN: {data}')
-
-        #headers = r.headers
         headers = {}
         headers["X-CSRFToken"] = self.csrf_token
         headers["referer"] = f'{self.baseurl}/vpn_openvpn_server.php?act=new'
         headers["content-type"] = "application/x-www-form-urlencoded"
         
-        # sending form of ca import:
         r = self.http_session.post(f'{self.baseurl}/vpn_openvpn_server.php?act=new', verify=False, allow_redirects=False, data=data, headers=headers)
         
         if r.status_code == 302:
             print(f'VPN {data["description"]} importada com sucesso!')
             return True
-            
         else:
-            #print(f'erro ao importar CA. detalhes: {r.text}')
             print(f'erro ao importar vpn {data["description"]}.')
-            return False
-    
-    
+            return False    
+
+        
+        
     
     
     #
